@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+
+# Environment files (contains API keys)
+.env
+.env.local
+.env.*
+!.env.example
+backend/.env
+
+# Flutter
+.dart_tool/
+.packages
+build/
+*.iml
+.idea/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+
+# IDE
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Test artifacts
+*.log
+
