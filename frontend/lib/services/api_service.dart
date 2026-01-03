@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+
+
 import '../models/coin.dart';
 
 /// Service for communicating with the CoinScope backend API.
@@ -34,12 +37,16 @@ class ApiService {
     // Create multipart request
     final request = http.MultipartRequest('POST', uri);
     
-    // Add image file
+    // Detect image type from bytes
+    final contentType = _detectImageType(imageBytes);
+    
+    // Add image file with content type
     request.files.add(
       http.MultipartFile.fromBytes(
         'image',
         imageBytes,
         filename: filename,
+        contentType: contentType,
       ),
     );
     
@@ -78,6 +85,31 @@ class ApiService {
   /// Dispose of the HTTP client.
   void dispose() {
     _client.close();
+  }
+
+  /// Detect image MIME type from bytes using magic numbers.
+  MediaType _detectImageType(Uint8List bytes) {
+    if (bytes.length < 4) {
+      return MediaType('image', 'jpeg'); // Default
+    }
+    
+    // Check magic bytes
+    if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) {
+      return MediaType('image', 'jpeg');
+    }
+    if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) {
+      return MediaType('image', 'png');
+    }
+    if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) {
+      return MediaType('image', 'gif');
+    }
+    if (bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 &&
+        bytes.length > 11 && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) {
+      return MediaType('image', 'webp');
+    }
+    
+    // Default to JPEG
+    return MediaType('image', 'jpeg');
   }
 }
 
