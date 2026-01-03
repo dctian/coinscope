@@ -1,10 +1,10 @@
 """
-VLM Service - Multi-provider Vision Language Model integration using LiteLLM.
+VLM Service - Vision Language Model integration for coin identification.
 
 Supports:
-- OpenAI GPT-4 Vision
-- Google Gemini Pro Vision
-- Anthropic Claude 3
+- Google Gemini (direct SDK for better accuracy)
+- OpenAI GPT-4 Vision (via LiteLLM)
+- Anthropic Claude 3 (via LiteLLM)
 """
 
 import base64
@@ -21,22 +21,22 @@ from ..models.coin import Coin
 
 
 class VLMService:
-    """Service for coin identification using Vision Language Models via LiteLLM."""
+    """Service for coin identification using Vision Language Models."""
     
     # Prompt template for coin identification
     COIN_IDENTIFICATION_PROMPT = """Carefully analyze this image of coin(s). 
 
 IMPORTANT: First read ALL text inscribed on the coin(s) - this is critical for accurate identification.
-Look for country names, year, denomination, and any other inscriptions.
+Look for country names, year, denomination, and any other inscriptions visible on the coin.
 
 For each coin visible, identify and provide the following information:
 
-1. name: Name of the coin (e.g., "Canadian Quarter", "Quarter Dollar", "1 Euro")
-2. country: Country of origin - MUST match the text on the coin
+1. name: Name of the coin (e.g., "5 Forint", "Quarter Dollar", "1 Euro")
+2. country: Country of origin - MUST match the text on the coin (e.g., if you see "MAGYARORSZÁG", the country is Hungary)
 3. year: Year minted (read from the coin if visible)
-4. denomination: Face value denomination as text (e.g., "25 cents", "25 cents", "1 euro")
+4. denomination: Face value denomination as text (e.g., "5 forint", "25 cents", "1 euro")
 5. face_value: Numeric face value as a decimal number
-6. currency: Currency code (e.g., "CAD" for Canadian, "USD", "EUR", "GBP", etc)
+6. currency: Currency code (e.g., "HUF" for Hungarian Forint, "USD", "EUR", "GBP")
 7. obverse_description: Brief description of the front side including any text visible
 8. reverse_description: Brief description of the back side including any text visible
 9. confidence: Your confidence in this identification from 0.0 to 1.0
@@ -47,14 +47,14 @@ If no coins are visible, return an empty array: []
 Example response format:
 [
   {
-    "name": "Canadian Quarter",
-    "country": "Canada",
+    "name": "5 Forint",
+    "country": "Hungary",
     "year": 2017,
-    "denomination": "25 cents",
-    "face_value": 0.25,
-    "currency": "CAD",
-    "obverse_description": "Queen Elizabeth II with text CANADA",
-    "reverse_description": "Denomination 25 with text CENTS",
+    "denomination": "5 forint",
+    "face_value": 5.0,
+    "currency": "HUF",
+    "obverse_description": "Great Egret bird with text MAGYARORSZÁG",
+    "reverse_description": "Large numeral 5 with text FORINT",
     "confidence": 0.95
   }
 ]"""
@@ -64,12 +64,25 @@ Example response format:
         Initialize VLM Service.
         
         Args:
-            model: VLM model to use. Defaults to VLM_MODEL env var or gpt-4-vision-preview.
+            model: VLM model to use. Defaults to VLM_MODEL env var.
         """
-        self.model = model or os.getenv("VLM_MODEL", "gemini/gemini-flash-latest")
+        self.model = model or os.getenv("VLM_MODEL", "gemini-2.0-flash")
+        self.use_gemini_sdk = self.model.startswith("gemini") and not self.model.startswith("gemini/")
         
-        # Configure LiteLLM
-        litellm.set_verbose = os.getenv("DEBUG", "false").lower() == "true"
+        # Configure based on provider
+        if self.use_gemini_sdk:
+            self._init_gemini()
+        else:
+            litellm.set_verbose = os.getenv("DEBUG", "false").lower() == "true"
+    
+    def _init_gemini(self):
+        """Initialize Gemini SDK."""
+        import google.generativeai as genai
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable is required")
+        genai.configure(api_key=api_key)
+        self.genai = genai
     
     def _resize_image(self, image_bytes: bytes, max_size: int = 1280) -> bytes:
         """Resize image to fit within max dimensions while preserving aspect ratio.
@@ -163,16 +176,70 @@ Example response format:
             Tuple of (list of identified Coin objects, model name used)
         """
         # Resize image if too large (keeps under API limits)
-        # Use 1280px to conserve API tokens while preserving text details
         processed_bytes = self._resize_image(image_bytes, max_size=2048)
         
+        if self.use_gemini_sdk:
+            response_text = await self._call_gemini_sdk(processed_bytes)
+        else:
+            response_text = await self._call_litellm(processed_bytes)
+        
+        # Parse JSON response
+        coins_data = self._parse_json_response(response_text)
+        
+        # Convert to Coin objects
+        coins = []
+        for coin_data in coins_data:
+            try:
+                coin = Coin(
+                    name=coin_data.get("name", "Unknown"),
+                    country=coin_data.get("country", "Unknown"),
+                    year=coin_data.get("year"),
+                    denomination=coin_data.get("denomination", "Unknown"),
+                    face_value=coin_data.get("face_value"),
+                    currency=coin_data.get("currency", "Unknown"),
+                    obverse_description=coin_data.get("obverse_description"),
+                    reverse_description=coin_data.get("reverse_description"),
+                    confidence=float(coin_data.get("confidence", 0.5))
+                )
+                coins.append(coin)
+            except Exception:
+                # Skip malformed coin data
+                continue
+        
+        return coins, self.model
+    
+    async def _call_gemini_sdk(self, image_bytes: bytes) -> str:
+        """Call Gemini API directly using the SDK for better accuracy."""
+        import asyncio
+        
+        # Create PIL Image for Gemini SDK
+        img = Image.open(BytesIO(image_bytes))
+        
+        # Get the model
+        model = self.genai.GenerativeModel(self.model)
+        
+        # Generate content with image - run in thread pool since SDK is synchronous
+        def _generate():
+            response = model.generate_content(
+                [self.COIN_IDENTIFICATION_PROMPT, img],
+                generation_config=self.genai.GenerationConfig(
+                    temperature=0.1,
+                    max_output_tokens=4000,
+                )
+            )
+            return response.text
+        
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _generate)
+    
+    async def _call_litellm(self, image_bytes: bytes) -> str:
+        """Call VLM via LiteLLM (for OpenAI, Anthropic, etc.)."""
         # Encode image to base64
-        image_b64 = self._encode_image(processed_bytes)
+        image_b64 = self._encode_image(image_bytes)
         media_type = "image/jpeg"  # Always JPEG after resize
         data_url = f"data:{media_type};base64,{image_b64}"
         
         # Construct message with image using OpenAI-compatible format
-        # LiteLLM handles translation to provider-specific formats
         messages = [
             {
                 "role": "user",
@@ -201,48 +268,20 @@ Example response format:
                     model=self.model,
                     messages=messages,
                     max_tokens=4000,
-                    temperature=0.1  # Low temperature for consistent JSON output
+                    temperature=0.1
                 )
                 
-                # Check if we got a valid response
                 if response.choices and response.choices[0].message.content:
-                    break
+                    return response.choices[0].message.content
             except Exception as e:
                 last_error = e
                 if attempt < max_retries - 1:
                     import asyncio
-                    await asyncio.sleep(2)  # Brief delay before retry
+                    await asyncio.sleep(2)
                     continue
                 raise
-        else:
-            if last_error:
-                raise last_error
         
-        # Extract response text
-        response_text = response.choices[0].message.content
-        
-        # Parse JSON response
-        coins_data = self._parse_json_response(response_text)
-        
-        # Convert to Coin objects
-        coins = []
-        for coin_data in coins_data:
-            try:
-                coin = Coin(
-                    name=coin_data.get("name", "Unknown"),
-                    country=coin_data.get("country", "Unknown"),
-                    year=coin_data.get("year"),
-                    denomination=coin_data.get("denomination", "Unknown"),
-                    face_value=coin_data.get("face_value"),
-                    currency=coin_data.get("currency", "Unknown"),
-                    obverse_description=coin_data.get("obverse_description"),
-                    reverse_description=coin_data.get("reverse_description"),
-                    confidence=float(coin_data.get("confidence", 0.5))
-                )
-                coins.append(coin)
-            except Exception:
-                # Skip malformed coin data
-                continue
-        
-        return coins, self.model
+        if last_error:
+            raise last_error
+        return "[]"
 
