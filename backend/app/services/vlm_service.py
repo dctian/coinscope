@@ -39,7 +39,7 @@ Look for country names, year, denomination, and any other inscriptions.
 For each coin visible, identify and provide the following information:
 
 1. name: Name of the coin (e.g., "Canadian Quarter", "Quarter Dollar", "1 Euro")
-2. country: Country of origin - MUST match the text on the coin
+2. country: Country of origin (e.g., "Canada", "United States", "Europe")
 3. year: Year minted (read from the coin if visible)
 4. denomination: Face value denomination as text (e.g., "25 cents", "25 cents", "1 euro")
 5. face_value: Numeric face value as a decimal number
