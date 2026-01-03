@@ -219,28 +219,44 @@ Example response format:
         """
         import asyncio
         
-        # Resize image if too large (keeps under API limits)
-        processed_bytes = self._resize_image(image_bytes, max_size=2048)
-        
         # Use Gemini SDK directly for Gemini models (better image handling)
         if GENAI_AVAILABLE and self._is_gemini_model():
+            # Prepare both original and resized variants; try original first to preserve detail
+            processed_bytes = self._resize_image(image_bytes, max_size=2048)
+            variants = [("original", image_bytes)]
+            if processed_bytes != image_bytes:
+                variants.append(("resized", processed_bytes))
+
             max_retries = 3
             last_error = None
+            response_text = ""
+            coins_data = []
             
-            for attempt in range(max_retries):
-                try:
-                    response_text = await self._call_gemini_directly(processed_bytes)
+            for variant_name, payload in variants:
+                for attempt in range(max_retries):
+                    try:
+                        response_text = await self._call_gemini_directly(payload)
+                        # Debug: log the raw response
+                        if os.getenv("DEBUG", "false").lower() == "true":
+                            print(f"[DEBUG] Gemini response ({variant_name}):\n{response_text[:500]}...")
+                        coins_data = self._parse_json_response(response_text)
+                        if coins_data:
+                            break
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(2)
+                            continue
+                        raise
+                if coins_data:
                     break
-                except Exception as e:
-                    last_error = e
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(2)
-                        continue
-                    raise
             else:
                 if last_error:
                     raise last_error
         else:
+            # Resize image if too large (keeps under API limits)
+            processed_bytes = self._resize_image(image_bytes, max_size=2048)
+            
             # Use LiteLLM for other providers (OpenAI, Anthropic, etc.)
             image_b64 = self._encode_image(processed_bytes)
             media_type = "image/jpeg"
@@ -289,18 +305,22 @@ Example response format:
                     raise last_error
             
             response_text = response.choices[0].message.content
-        
-        # Parse JSON response
-        coins_data = self._parse_json_response(response_text)
+            coins_data = self._parse_json_response(response_text)
         
         # Convert to Coin objects
         coins = []
         for coin_data in coins_data:
             try:
+                # Normalize year if returned as a range/string (e.g., "1626-1868")
+                year_value = coin_data.get("year")
+                if isinstance(year_value, str):
+                    year_match = re.search(r"\d{3,4}", year_value)
+                    year_value = int(year_match.group()) if year_match else None
+                
                 coin = Coin(
                     name=coin_data.get("name", "Unknown"),
                     country=coin_data.get("country", "Unknown"),
-                    year=coin_data.get("year"),
+                    year=year_value,
                     denomination=coin_data.get("denomination", "Unknown"),
                     face_value=coin_data.get("face_value"),
                     currency=coin_data.get("currency", "Unknown"),
