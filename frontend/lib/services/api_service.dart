@@ -10,7 +10,7 @@ import '../models/coin.dart';
 class ApiService {
   // Default to localhost for development
   // Change this to your production URL when deploying
-  static const String _defaultBaseUrl = 'http://localhost:8000';
+  static const String _defaultBaseUrl = 'http://10.0.0.21:8000';
   
   final String baseUrl;
   final http.Client _client;
