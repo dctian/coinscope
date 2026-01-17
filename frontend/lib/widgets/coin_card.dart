@@ -49,13 +49,14 @@ class CoinCard extends StatelessWidget {
               const SizedBox(height: 12),
               
               // Country and year row
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _InfoChip(
                     icon: Icons.flag_outlined,
                     label: coin.country,
                   ),
-                  const SizedBox(width: 8),
                   _InfoChip(
                     icon: Icons.calendar_today_outlined,
                     label: coin.yearDisplay,
@@ -66,7 +67,9 @@ class CoinCard extends StatelessWidget {
               const SizedBox(height: 8),
               
               // Denomination row
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   _InfoChip(
                     icon: Icons.monetization_on_outlined,
