@@ -11,7 +11,7 @@ class ApiService {
   // Default to a build-time override so mobile/web can point at a VM IP.
   static const String _defaultBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.0.21:8000',
+    defaultValue: 'http://srv968248.hstgr.cloud:8000',
   );
   
   final String baseUrl;
