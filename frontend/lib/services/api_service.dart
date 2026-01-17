@@ -8,9 +8,11 @@ import '../models/coin.dart';
 
 /// Service for communicating with the CoinScope backend API.
 class ApiService {
-  // Default to localhost for development
-  // Change this to your production URL when deploying
-  static const String _defaultBaseUrl = 'http://10.0.0.21:8000';
+  // Default to a build-time override so mobile/web can point at a VM IP.
+  static const String _defaultBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.0.21:8000',
+  );
   
   final String baseUrl;
   final http.Client _client;
