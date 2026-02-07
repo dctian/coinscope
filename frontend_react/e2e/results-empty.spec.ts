@@ -18,7 +18,7 @@ test.describe("Results Page — edge cases", () => {
 
   test("shows error state when API returns an error", async ({ page }) => {
     // Intercept the identify API call and return a 500 error
-    await page.route("**/api/v1/coins/identify", (route) =>
+    await page.route("**/api/v1/coins/identify*", (route) =>
       route.fulfill({
         status: 500,
         contentType: "application/json",

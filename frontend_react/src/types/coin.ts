@@ -10,6 +10,7 @@ export interface Coin {
   obverse_description: string | null;
   reverse_description: string | null;
   confidence: number;
+  bbox?: number[] | null;
 }
 
 /** Response from the POST /api/v1/coins/identify endpoint. */

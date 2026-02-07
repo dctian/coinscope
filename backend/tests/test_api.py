@@ -133,6 +133,46 @@ class TestIdentifyEndpoint:
         assert resp.status_code == 500
         assert "failed" in resp.json()["detail"].lower()
 
+    @pytest.mark.asyncio
+    async def test_model_query_param_overrides_default(
+        self, override_app, jpeg_upload_bytes: bytes
+    ):
+        """When a model query param is provided, VLMService should be created with it."""
+        with patch("app.routers.coins.VLMService") as MockVLMService:
+            mock_svc = AsyncMock(spec=VLMService)
+            mock_svc.model = "gemini-2.0-flash-lite"
+            mock_svc.identify_coins = AsyncMock(
+                return_value=(_make_coins(), "gemini-2.0-flash-lite")
+            )
+            MockVLMService.return_value = mock_svc
+
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/v1/coins/identify?model=gemini-2.0-flash-lite",
+                    files={"image": ("coin.jpg", jpeg_upload_bytes, "image/jpeg")},
+                )
+
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["model_used"] == "gemini-2.0-flash-lite"
+            MockVLMService.assert_called_once_with(model="gemini-2.0-flash-lite")
+
+    @pytest.mark.asyncio
+    async def test_no_model_param_uses_default(
+        self, override_app, mock_service, jpeg_upload_bytes: bytes
+    ):
+        """Without a model query param, the default VLMService should be used."""
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/coins/identify",
+                files={"image": ("coin.jpg", jpeg_upload_bytes, "image/jpeg")},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["model_used"] == "test-model"
+
 
 class TestHealthEndpoint:
     """Tests for GET /api/v1/coins/health."""

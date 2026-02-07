@@ -2,23 +2,58 @@ import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import Layout from "../components/Layout";
+import ModelSelector, { DEFAULT_MODEL } from "../components/ModelSelector";
 import { useIdentifyCoins } from "../hooks/useIdentifyCoins";
+import { useHistory } from "../hooks/useHistory";
 import type { ResultsLocationState } from "../types/coin";
+
+const MODEL_STORAGE_KEY = "coinscope_selected_model";
+
+function loadSavedModel(): string {
+  try {
+    return localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_MODEL;
+  } catch {
+    return DEFAULT_MODEL;
+  }
+}
 
 export default function HomePage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [error, setError] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string>(loadSavedModel);
 
   const { mutate, isPending } = useIdentifyCoins();
+  const { entries: historyEntries, saveSearch } = useHistory();
+
+  const handleModelChange = useCallback((model: string) => {
+    setSelectedModel(model);
+    try {
+      localStorage.setItem(MODEL_STORAGE_KEY, model);
+    } catch {
+      // localStorage unavailable — ignore silently
+    }
+  }, []);
 
   /** Send a File to the API and navigate to results on success. */
   const handleFile = useCallback(
     (file: File) => {
       setError(null);
-      mutate(file, {
-        onSuccess: (data) => {
+      mutate({ file, model: selectedModel }, {
+        onSuccess: async (data) => {
+          // Save to history before navigating
+          try {
+            await saveSearch(
+              file,
+              data.coins,
+              data.total_coins_detected,
+              data.model_used,
+            );
+          } catch {
+            // History save failure should not block navigation
+          }
+
           // Create an object URL for the image preview on the results page
           const imageUrl = URL.createObjectURL(file);
           const state: ResultsLocationState = {
@@ -34,7 +69,7 @@ export default function HomePage() {
         },
       });
     },
-    [mutate, navigate],
+    [mutate, navigate, saveSearch, selectedModel],
   );
 
   /** Handle file input change (gallery pick). */
@@ -95,7 +130,30 @@ export default function HomePage() {
       {/* Main content */}
       <div className="flex min-h-screen flex-col px-6 py-8">
         {/* Header */}
-        <header className="flex flex-col items-center pt-6">
+        <header className="relative flex flex-col items-center pt-6">
+          {/* History button — only shown when there are past searches */}
+          {historyEntries.length > 0 && (
+            <button
+              type="button"
+              onClick={() => navigate("/history")}
+              className="absolute right-0 top-6 rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              aria-label="Search history"
+            >
+              <svg
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                />
+              </svg>
+            </button>
+          )}
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 shadow-lg shadow-emerald-600/30">
             <svg
               className="h-11 w-11 text-white"
@@ -204,6 +262,12 @@ export default function HomePage() {
                   results
                 </p>
               </div>
+
+              {/* Model selector */}
+              <ModelSelector
+                selectedModel={selectedModel}
+                onModelChange={handleModelChange}
+              />
 
               {/* Action buttons */}
               <div className="mt-8 flex flex-col gap-3">

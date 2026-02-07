@@ -18,16 +18,23 @@ export class ApiError extends Error {
  * Upload an image to the coin identification endpoint.
  *
  * @param file - The image File to upload
+ * @param model - Optional VLM model identifier to use for identification
  * @returns The identification response with detected coins
  * @throws ApiError if the request fails
  */
 export async function identifyCoins(
   file: File,
+  model?: string,
 ): Promise<CoinIdentificationResponse> {
   const formData = new FormData();
   formData.append("image", file);
 
-  const response = await fetch(`${API_BASE_URL}/api/v1/coins/identify`, {
+  let endpoint = `${API_BASE_URL}/api/v1/coins/identify`;
+  if (model) {
+    endpoint += `?model=${encodeURIComponent(model)}`;
+  }
+
+  const response = await fetch(endpoint, {
     method: "POST",
     body: formData,
   });

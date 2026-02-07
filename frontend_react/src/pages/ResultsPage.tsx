@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Layout from "../components/Layout";
 import CoinCard from "../components/CoinCard";
 import CoinDetailModal from "../components/CoinDetailModal";
+import CroppedCoinImage from "../components/CroppedCoinImage";
+import SwipeableResults from "../components/SwipeableResults";
 import type { Coin, ResultsLocationState } from "../types/coin";
 
 export default function ResultsPage() {
@@ -114,22 +116,13 @@ export default function ResultsPage() {
               Try Again
             </button>
           </div>
-        ) : (
-          /* ---------- Results list ---------- */
+        ) : coins.length === 1 ? (
+          /* ---------- Single coin result ---------- */
           <div className="flex-1 px-4 pb-24">
-            {/* Image preview */}
-            <div className="mt-2 overflow-hidden rounded-2xl shadow-md">
-              <img
-                src={imageUrl}
-                alt="Uploaded coin"
-                className="h-48 w-full object-cover"
-              />
-            </div>
-
             {/* Summary row */}
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-2 flex items-center justify-between">
               <h2 className="text-base font-bold text-gray-900">
-                {coins.length} Coin{coins.length !== 1 ? "s" : ""} Found
+                1 Coin Found
               </h2>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 <svg
@@ -149,21 +142,30 @@ export default function ResultsPage() {
               </span>
             </div>
 
-            {/* Coin cards */}
-            <div className="mt-4 flex flex-col gap-3">
-              {coins.map((coin) => (
-                <CoinCard
-                  key={coin.id}
-                  coin={coin}
-                  onTap={() => setSelectedCoin(coin)}
-                />
-              ))}
+            {/* Cropped coin image */}
+            <div className="mx-auto mt-4 max-w-xs">
+              <CroppedCoinImage imageUrl={imageUrl} bbox={coins[0]!.bbox} />
+            </div>
+
+            {/* Coin card */}
+            <div className="mt-4">
+              <CoinCard
+                coin={coins[0]!}
+                onTap={() => setSelectedCoin(coins[0]!)}
+              />
             </div>
           </div>
+        ) : (
+          /* ---------- Multiple coins: swipeable ---------- */
+          <SwipeableResults
+            coins={coins}
+            imageUrl={imageUrl}
+            modelUsed={modelUsed}
+          />
         )}
       </div>
 
-      {/* Detail modal */}
+      {/* Detail modal (for single coin view) */}
       {selectedCoin && (
         <CoinDetailModal
           coin={selectedCoin}
