@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -59,5 +60,31 @@ describe("HomePage", () => {
     expect(
       screen.getByText("Take a photo of your coins"),
     ).toBeInTheDocument();
+  });
+
+  it("renders the model selector with all options", () => {
+    renderHomePage();
+    expect(screen.getByRole("radiogroup", { name: /select ai model/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Gemini 3 Pro" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Gemini Flash" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Gemini Flash Lite" })).toBeInTheDocument();
+  });
+
+  it("has Gemini 3 Pro selected by default", () => {
+    renderHomePage();
+    const pro = screen.getByRole("radio", { name: "Gemini 3 Pro" });
+    expect(pro).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("allows selecting a different model", async () => {
+    const user = userEvent.setup();
+    renderHomePage();
+
+    const flashLite = screen.getByRole("radio", { name: "Gemini Flash Lite" });
+    await user.click(flashLite);
+    expect(flashLite).toHaveAttribute("aria-checked", "true");
+
+    const pro = screen.getByRole("radio", { name: "Gemini 3 Pro" });
+    expect(pro).toHaveAttribute("aria-checked", "false");
   });
 });
