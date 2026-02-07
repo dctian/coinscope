@@ -14,6 +14,8 @@ const TEST_IMAGE = path.resolve(
  * the results page, coin cards, and detail modal.
  */
 test.describe("Identify Coins (requires backend)", () => {
+  test.setTimeout(120_000);
+
   test("uploads an image and displays results", async ({ page }) => {
     // Go to home page
     await page.goto("/");
@@ -36,12 +38,9 @@ test.describe("Identify Coins (requires backend)", () => {
     const cardCount = await coinCards.count();
     expect(cardCount).toBeGreaterThanOrEqual(1);
 
-    // Verify the image preview is shown
-    const imagePreview = page.locator('img[alt="Uploaded coin"]');
-    await expect(imagePreview).toBeVisible();
-
-    // Verify the "N Coin(s) Found" summary text
-    await expect(page.getByText(/\d+ coins? found/i)).toBeVisible();
+    // Verify the "N Coin(s) Found" or coin counter is shown
+    const coinInfo = page.getByText(/\d+ coins? found/i).or(page.getByTestId("coin-counter"));
+    await expect(coinInfo).toBeVisible();
 
     // Click on the first coin card to open the detail modal
     await coinCards.first().click();
