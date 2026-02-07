@@ -5,8 +5,13 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
-    env_file:
-      - ./backend/.env
+    environment:
+      - VLM_MODEL=${VLM_MODEL:-gemini-3-pro-preview}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DEBUG=${DEBUG:-false}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     volumes:
       - ./data:/app/data
 
@@ -15,7 +20,7 @@ services:
       context: ./frontend_react
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: http://localhost:8000
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
     depends_on:
