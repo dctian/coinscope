@@ -1,0 +1,335 @@
+import { useRef, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import Layout from "../components/Layout";
+import { useIdentifyCoins } from "../hooks/useIdentifyCoins";
+import type { ResultsLocationState } from "../types/coin";
+
+export default function HomePage() {
+  const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const [error, setError] = useState<string | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
+
+  const { mutate, isPending } = useIdentifyCoins();
+
+  /** Send a File to the API and navigate to results on success. */
+  const handleFile = useCallback(
+    (file: File) => {
+      setError(null);
+      mutate(file, {
+        onSuccess: (data) => {
+          // Create an object URL for the image preview on the results page
+          const imageUrl = URL.createObjectURL(file);
+          const state: ResultsLocationState = {
+            coins: data.coins,
+            totalCoinsDetected: data.total_coins_detected,
+            modelUsed: data.model_used,
+            imageUrl,
+          };
+          navigate("/results", { state });
+        },
+        onError: (err) => {
+          setError(err.message || "Failed to identify coins. Please try again.");
+        },
+      });
+    },
+    [mutate, navigate],
+  );
+
+  /** Handle file input change (gallery pick). */
+  const onFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) handleFile(file);
+      // Reset input so the same file can be re-selected
+      e.target.value = "";
+    },
+    [handleFile],
+  );
+
+  /** Open file picker. */
+  const openGallery = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  /** Stop any active camera stream. */
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setShowCamera(false);
+  }, []);
+
+  /** Start the camera via getUserMedia. */
+  const openCamera = useCallback(async () => {
+    setError(null);
+
+    // Check if getUserMedia is available
+    if (!navigator.mediaDevices?.getUserMedia) {
+      // Fall back to file input with capture attribute
+      fileInputRef.current?.setAttribute("capture", "environment");
+      fileInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+      streamRef.current = stream;
+      setShowCamera(true);
+
+      // Wait for the video element to mount
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      });
+    } catch {
+      // Camera denied or not available -- fall back to file picker
+      fileInputRef.current?.setAttribute("capture", "environment");
+      fileInputRef.current?.click();
+    }
+  }, []);
+
+  /** Capture a frame from the live camera feed. */
+  const capturePhoto = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          const file = new File([blob], "camera-capture.jpg", {
+            type: "image/jpeg",
+          });
+          stopCamera();
+          handleFile(file);
+        }
+      },
+      "image/jpeg",
+      0.92,
+    );
+  }, [handleFile, stopCamera]);
+
+  return (
+    <Layout>
+      {/* Hidden helpers */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/gif,image/webp"
+        className="hidden"
+        onChange={onFileChange}
+      />
+      <canvas ref={canvasRef} className="hidden" />
+
+      {/* Camera view */}
+      {showCamera && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="flex-1 object-cover"
+          />
+          <div className="flex items-center justify-center gap-6 bg-black/80 p-6">
+            <button
+              type="button"
+              onClick={stopCamera}
+              className="rounded-full bg-white/20 px-5 py-3 text-sm font-semibold text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={capturePhoto}
+              className="h-16 w-16 rounded-full border-4 border-white bg-white/30 transition-transform active:scale-90"
+              aria-label="Capture photo"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Main content */}
+      <div className="flex min-h-screen flex-col px-6 py-8">
+        {/* Header */}
+        <header className="flex flex-col items-center pt-6">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-600 shadow-lg shadow-emerald-600/30">
+            <svg
+              className="h-11 w-11 text-white"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 6v12m-3-2.818.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+              />
+            </svg>
+          </div>
+          <h1 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">
+            CoinScope
+          </h1>
+          <p className="mt-2 text-base text-gray-500">
+            Identify coins instantly with AI
+          </p>
+        </header>
+
+        {/* Body */}
+        <div className="mt-10 flex flex-1 flex-col">
+          {/* Error banner */}
+          {error && (
+            <div className="mb-6 flex items-start gap-3 rounded-xl bg-red-50 p-4">
+              <svg
+                className="mt-0.5 h-5 w-5 shrink-0 text-red-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"
+                />
+              </svg>
+              <p className="flex-1 text-sm text-red-700">{error}</p>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="shrink-0 text-red-400 hover:text-red-600"
+                aria-label="Dismiss error"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18 18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Loading state */}
+          {isPending ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-6">
+              <div className="h-14 w-14 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600" />
+              <div className="text-center">
+                <p className="text-lg font-medium text-gray-900">
+                  Analyzing coins...
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                  This may take a few seconds
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Instructions card */}
+              <div className="rounded-3xl border border-gray-200/80 bg-white/60 p-6 text-center backdrop-blur-sm">
+                <svg
+                  className="mx-auto h-12 w-12 text-emerald-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"
+                  />
+                </svg>
+                <h2 className="mt-4 text-lg font-semibold text-gray-900">
+                  Take a photo of your coins
+                </h2>
+                <p className="mt-2 text-sm text-gray-500">
+                  Position coins on a flat surface with good lighting for best
+                  results
+                </p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="mt-8 flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={openCamera}
+                  className="btn-primary"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z"
+                    />
+                  </svg>
+                  Take Photo
+                </button>
+
+                <button
+                  type="button"
+                  onClick={openGallery}
+                  className="btn-outline"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={2}
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M2.25 18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V6a2.25 2.25 0 0 0-2.25-2.25H4.5A2.25 2.25 0 0 0 2.25 6v12Z"
+                    />
+                  </svg>
+                  Choose from Gallery
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </Layout>
+  );
+}
