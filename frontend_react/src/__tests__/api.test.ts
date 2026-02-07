@@ -8,6 +8,7 @@ import { identifyCoins, checkHealth } from "../lib/api";
 const mockFetch = vi.fn();
 
 beforeEach(() => {
+  mockFetch.mockReset();
   vi.stubGlobal("fetch", mockFetch);
 });
 
@@ -55,8 +56,49 @@ describe("identifyCoins", () => {
     // Verify the request was a POST with FormData
     const [url, options] = mockFetch.mock.calls[0]!;
     expect(url).toContain("/api/v1/coins/identify");
+    expect(url).not.toContain("model=");
     expect(options.method).toBe("POST");
     expect(options.body).toBeInstanceOf(FormData);
+  });
+
+  it("appends model query param when model is provided", async () => {
+    const payload = {
+      coins: [],
+      total_coins_detected: 0,
+      model_used: "gemini-2.0-flash-lite",
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => payload,
+    });
+
+    const file = new File(["fake"], "coin.jpg", { type: "image/jpeg" });
+    await identifyCoins(file, "gemini-2.0-flash-lite");
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const callArgs = mockFetch.mock.calls[0]!;
+    const url = callArgs[0] as string;
+    expect(url).toContain("model=gemini-2.0-flash-lite");
+  });
+
+  it("does not append model query param when model is undefined", async () => {
+    const payload = {
+      coins: [],
+      total_coins_detected: 0,
+      model_used: "default-model",
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => payload,
+    });
+
+    const file = new File(["fake"], "coin.jpg", { type: "image/jpeg" });
+    await identifyCoins(file, undefined);
+
+    const [url] = mockFetch.mock.calls[0]!;
+    expect(url).not.toContain("model=");
   });
 
   it("throws ApiError with detail message on API error", async () => {

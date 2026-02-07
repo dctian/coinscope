@@ -7,7 +7,7 @@ endpoint for introspecting available VLM backends, and a /health check.
 
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -60,13 +60,17 @@ def _is_valid_image(content_type: str | None, image_bytes: bytes) -> bool:
 async def identify_coins(
     request: Request,
     image: UploadFile = File(...),
+    model: str | None = Query(None, description="Optional VLM model override"),
     vlm_service: VLMService = Depends(get_vlm_service),
 ):
     """Identify coins in an uploaded image.
 
     Accepts JPEG, PNG, GIF, or WebP images.
     Returns identified coins with country, year, denomination, and more.
+    An optional ``model`` query parameter can override the default VLM model.
     """
+    if model:
+        vlm_service = VLMService(model=model)
     # Read image bytes
     try:
         image_bytes = await image.read()
