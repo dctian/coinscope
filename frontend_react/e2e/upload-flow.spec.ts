@@ -28,7 +28,7 @@ test.describe("Upload flow interactions", () => {
 
   test("shows error when API returns 400 for bad file", async ({ page }) => {
     // Mock the API to return a 400 error (e.g. unsupported file type)
-    await page.route("**/api/v1/coins/identify", (route) =>
+    await page.route("**/api/v1/coins/identify*", (route) =>
       route.fulfill({
         status: 400,
         contentType: "application/json",
@@ -53,7 +53,7 @@ test.describe("Upload flow interactions", () => {
 
   test("shows loading spinner during upload", async ({ page }) => {
     // Mock the API with a delayed response to observe the loading state
-    await page.route("**/api/v1/coins/identify", async (route) => {
+    await page.route("**/api/v1/coins/identify*", async (route) => {
       // Delay the response by 3 seconds
       await new Promise((resolve) => setTimeout(resolve, 3_000));
       await route.fulfill({
