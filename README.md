@@ -106,11 +106,54 @@ flutter run -d ios           # iOS Simulator
 flutter run -d android       # Android Emulator
 ```
 
-### Docker
+### Docker Deployment
+
+Run both the backend and React frontend with Docker Compose:
 
 ```bash
-docker compose up --build    # Starts backend on port 8000
+docker compose up --build
 ```
+
+This starts:
+- **Backend** at http://localhost:8000
+- **Frontend** at http://localhost:3000
+
+To point the frontend at a different backend URL:
+
+```bash
+# In docker-compose.yml, change the build arg:
+VITE_API_BASE_URL: https://your-backend-url.com
+```
+
+### Android Deployment (Capacitor)
+
+The React frontend can be deployed to Android as a native app via Capacitor:
+
+```bash
+cd frontend_react
+
+# 1. Set the backend URL (use your machine's LAN IP for device testing)
+echo "VITE_API_BASE_URL=http://YOUR_LAN_IP:8000" > .env
+
+# 2. Build the web app
+npm run build
+
+# 3. Sync web assets into the Android project
+npx cap sync android
+
+# 4. Build the APK
+cd android && ./gradlew assembleDebug && cd ..
+
+# 5. Install on a connected device
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+**Requirements:** Node.js 20+, Android SDK, Java 21 (e.g. `brew install openjdk@21`).
+
+**Notes:**
+- The Android WebView uses `http://` scheme (configured in `capacitor.config.ts`) to avoid mixed-content blocking when connecting to a local HTTP backend
+- Camera access uses the `@capacitor/camera` plugin for native camera integration
+- Find your LAN IP with `ipconfig getifaddr en0` (macOS) or `hostname -I` (Linux)
 
 ## API Endpoints
 
