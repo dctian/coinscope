@@ -106,11 +106,15 @@ flutter run -d ios           # iOS Simulator
 flutter run -d android       # Android Emulator
 ```
 
-### Docker Deployment
+### Docker Deployment (Local)
 
 Run both the backend and React frontend with Docker Compose:
 
 ```bash
+# Create a .env file with your API keys
+echo "GEMINI_API_KEY=your-key-here" > .env
+
+# Build and start
 docker compose up --build
 ```
 
@@ -121,8 +125,37 @@ This starts:
 To point the frontend at a different backend URL:
 
 ```bash
-# In docker-compose.yml, change the build arg:
-VITE_API_BASE_URL: https://your-backend-url.com
+VITE_API_BASE_URL=https://your-backend-url.com docker compose up --build
+```
+
+### Hostinger VPS Deployment
+
+Deploy to a Hostinger VPS using the Docker Manager API:
+
+```bash
+# Set your Hostinger API key and VPS ID
+HOSTINGER_API_KEY="your-hostinger-api-key"
+VPS_ID="your-vps-id"
+
+# Deploy from GitHub with environment variables
+curl -X POST "https://developers.hostinger.com/api/vps/v1/virtual-machines/${VPS_ID}/docker" \
+  -H "Authorization: Bearer ${HOSTINGER_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"project_name\": \"coinscope\",
+    \"content\": \"https://github.com/dctian/coinscope\",
+    \"environment\": \"GEMINI_API_KEY=your-key\nVLM_MODEL=gemini-3-pro-preview\nVITE_API_BASE_URL=http://YOUR_SERVER_IP:8000\"
+  }"
+```
+
+This clones the repo on the server, builds both images, and starts the services.
+
+To redeploy (e.g. after pushing new code), first remove the old project then re-run the deploy:
+
+```bash
+curl -X DELETE "https://developers.hostinger.com/api/vps/v1/virtual-machines/${VPS_ID}/docker/coinscope/down" \
+  -H "Authorization: Bearer ${HOSTINGER_API_KEY}"
+# Wait ~15 seconds, then run the deploy command above
 ```
 
 ### Android Deployment (Capacitor)
