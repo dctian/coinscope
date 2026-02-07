@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import Layout from "../components/Layout";
 import { useIdentifyCoins } from "../hooks/useIdentifyCoins";
 import type { ResultsLocationState } from "../types/coin";
@@ -7,12 +8,8 @@ import type { ResultsLocationState } from "../types/coin";
 export default function HomePage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
   const [error, setError] = useState<string | null>(null);
-  const [showCamera, setShowCamera] = useState(false);
 
   const { mutate, isPending } = useIdentifyCoins();
 
@@ -56,77 +53,37 @@ export default function HomePage() {
     fileInputRef.current?.click();
   }, []);
 
-  /** Stop any active camera stream. */
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    setShowCamera(false);
-  }, []);
 
-  /** Start the camera via getUserMedia. */
+  /** Open the native camera via Capacitor Camera plugin. */
   const openCamera = useCallback(async () => {
     setError(null);
 
-    // Check if getUserMedia is available
-    if (!navigator.mediaDevices?.getUserMedia) {
-      // Fall back to file input with capture attribute
-      fileInputRef.current?.setAttribute("capture", "environment");
-      fileInputRef.current?.click();
-      return;
-    }
-
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+      const photo = await Camera.getPhoto({
+        quality: 90,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Camera,
+        width: 2048,
+        height: 2048,
       });
-      streamRef.current = stream;
-      setShowCamera(true);
 
-      // Wait for the video element to mount
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      });
+      if (photo.webPath) {
+        const response = await fetch(photo.webPath);
+        const blob = await response.blob();
+        const file = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
+        handleFile(file);
+      }
     } catch {
-      // Camera denied or not available -- fall back to file picker
+      // Camera not available or user cancelled — fall back to file picker with capture
       fileInputRef.current?.setAttribute("capture", "environment");
       fileInputRef.current?.click();
     }
-  }, []);
+  }, [handleFile]);
 
-  /** Capture a frame from the live camera feed. */
-  const capturePhoto = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.drawImage(video, 0, 0);
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          const file = new File([blob], "camera-capture.jpg", {
-            type: "image/jpeg",
-          });
-          stopCamera();
-          handleFile(file);
-        }
-      },
-      "image/jpeg",
-      0.92,
-    );
-  }, [handleFile, stopCamera]);
 
   return (
     <Layout>
-      {/* Hidden helpers */}
+      {/* Hidden file input for gallery pick */}
       <input
         ref={fileInputRef}
         type="file"
@@ -134,35 +91,6 @@ export default function HomePage() {
         className="hidden"
         onChange={onFileChange}
       />
-      <canvas ref={canvasRef} className="hidden" />
-
-      {/* Camera view */}
-      {showCamera && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="flex-1 object-cover"
-          />
-          <div className="flex items-center justify-center gap-6 bg-black/80 p-6">
-            <button
-              type="button"
-              onClick={stopCamera}
-              className="rounded-full bg-white/20 px-5 py-3 text-sm font-semibold text-white"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={capturePhoto}
-              className="h-16 w-16 rounded-full border-4 border-white bg-white/30 transition-transform active:scale-90"
-              aria-label="Capture photo"
-            />
-          </div>
-        </div>
-      )}
 
       {/* Main content */}
       <div className="flex min-h-screen flex-col px-6 py-8">
