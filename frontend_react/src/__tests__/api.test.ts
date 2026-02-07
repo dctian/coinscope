@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { identifyCoins, checkHealth, ApiError } from "../lib/api";
+import { identifyCoins, checkHealth } from "../lib/api";
 
 // ---------------------------------------------------------------------------
 // Mock global.fetch
