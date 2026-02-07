@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY index.html vite.config.ts tsconfig.json tailwind.config.js postcss.config.js ./
+COPY index.html vite.config.ts tsconfig.json tailwind.config.js postcss.config.js vite-env.d.ts ./
 COPY src ./src
 
 ARG VITE_API_BASE_URL=http://localhost:8000
